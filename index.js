@@ -238,7 +238,7 @@ function ExtendWithoutPrototypes( asProxy, target /*, obj1, ... */ ) {
         for ( k = props.length; k--; ) {
             prop = props[ k ];
 
-            Descriptor.get( obj, prop ).asProxy( asProxy ).assignTo( newObj, prop );
+            Descriptor.get( obj, prop ).asProxy( asProxy ).assignTo( target, prop );
         }
     }
 
