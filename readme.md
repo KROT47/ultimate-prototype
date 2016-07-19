@@ -1,4 +1,4 @@
-# UltimateDescriptor
+# UltimatePrototype
 
 Provides werful tools to work with prototypes  
 
