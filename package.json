@@ -1,0 +1,22 @@
+{
+  "name": "ultimate-prototype",
+  "version": "1.0.0",
+  "description": "Provides powerful tools to work with prototypes",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KROT47/ultimate-prototype.git"
+  },
+  "keywords": [
+    "prototype"
+  ],
+  "author": "KROT47",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/KROT47/ultimate-prototype/issues"
+  },
+  "homepage": "https://github.com/KROT47/ultimate-prototype#readme"
+}
