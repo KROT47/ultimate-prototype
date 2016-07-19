@@ -18,5 +18,8 @@
   "bugs": {
     "url": "https://github.com/KROT47/ultimate-prototype/issues"
   },
-  "homepage": "https://github.com/KROT47/ultimate-prototype#readme"
+  "homepage": "https://github.com/KROT47/ultimate-prototype#readme",
+  "dependencies": {
+    "ultimate-descriptor": "^2.0.1"
+  }
 }
