@@ -45,9 +45,9 @@ function EachPrototype( obj, handler ) {
  * @param (Object) propDescriptors - property descriptors object ( @see: Object.defineProperties )
  * @return (Object)
  * E.g.
- * Prototypes.setup( { a: 1, b: 2 }, {
+ * Prototypes.setup( { a: 1, b: 2 }, { enumerable: true }, {
  * 		c: { get: function() { return 3 } }
- * }, { enumerable: true });
+ * });
  */
 function SetupPrototypes( obj, defaultDescriptor, propDescriptors ) {
 
@@ -69,10 +69,7 @@ function SetupPrototypes( obj, defaultDescriptor, propDescriptors ) {
             if ( descriptor = Descriptor.get( obj, prop ) ) {
 
                 descriptor
-	                .extend(
-	                    defaultDescriptor,
-	                    propDescriptors[ prop ]
-	                )
+	                .extend( defaultDescriptor, propDescriptors[ prop ] )
 	                .asProxy()
 	                .assignTo( obj, prop );
 
@@ -125,7 +122,7 @@ function AddPrototypes( obj, prototypes ) {
         if ( prototype.isPrototypeOf( obj ) ) return obj;
 
         // creating new prototypes chain to prevent cyclic error
-        prototype = GetPrototypesDifference( prototype, obj, true );
+        prototype = GetPrototypesDifference( prototype, obj );
 
         // first connect last prototype in chain with first 'obj's prototype
         Object.setPrototypeOf( prototype, Object.getPrototypeOf( obj ) );
