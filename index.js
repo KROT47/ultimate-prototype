@@ -46,12 +46,12 @@ function EachPrototype( obj, handler ) {
  * @return (Object)
  * E.g.
  * Prototypes.setup( { a: 1, b: 2 }, { enumerable: true }, {
- * 		c: { get: function() { return 3 } }
+ *      c: { get: function() { return 3 } }
  * });
  */
 function SetupPrototypes( obj, defaultDescriptor, propDescriptors ) {
 
-	var originObj = obj;
+    var originObj = obj;
 
     if ( !propDescriptors ) {
         propDescriptors = defaultDescriptor;
@@ -69,9 +69,9 @@ function SetupPrototypes( obj, defaultDescriptor, propDescriptors ) {
             if ( descriptor = Descriptor.get( obj, prop ) ) {
 
                 descriptor
-	                .extend( defaultDescriptor, propDescriptors[ prop ] )
-	                .asProxy()
-	                .assignTo( obj, prop );
+                    .extend( defaultDescriptor, propDescriptors[ prop ] )
+                    .asProxy()
+                    .assignTo( obj, prop );
 
                 props.splice( i, 1 );
             }
@@ -80,13 +80,13 @@ function SetupPrototypes( obj, defaultDescriptor, propDescriptors ) {
         obj = Object.getPrototypeOf( obj );
     }
 
-	// add all missing properties
+    // add all missing properties
     for ( var i = props.length; i--; ) {
-    	Object.defineProperty(
-    		originObj,
-    		props[ i ],
-    		Descriptor.extend( {}, defaultDescriptor, propDescriptors[ props[ i ] ] )
-    	);
+        Object.defineProperty(
+            originObj,
+            props[ i ],
+            Descriptor.extend( {}, defaultDescriptor, propDescriptors[ props[ i ] ] )
+        );
     }
 
     return originObj;
@@ -96,43 +96,86 @@ function SetupPrototypes( obj, defaultDescriptor, propDescriptors ) {
 /* ------------------------------ Add Prototypes To Object ------------------------------ */
 
 /**
- * Add all prototypes to object ( in order )
+ * Add all prototypes to object ( in order where last will become first )
+ * e.g. AddPrototypes( obj, [ proto1, proto2 ] ) 
+ *  => obj
+ *      - proto2
+ *        - proto1
+ *          - obj's old prototype
  * @param (Object) obj
  * @param (Object|Array) prototypes
  * @return (Object)
  */
 function AddPrototypes( obj, prototypes ) {
 
-    var prototype;
-
     if ( Array.isArray( prototypes ) ) {
-        // add all prototypes where each next prototype is set in previous
-        for ( var i = 0; i < prototypes.length; ++i ) {
-            prototype = prototypes[ i ];
+        
+        // add all prototypes one by one
+        for ( var i = 0; i < prototypes.length; ++i ) AddPrototypes( obj, prototypes[ i ] );
 
-            AddPrototypes( obj, prototype );
-
-            obj = prototype;
-        }
-    } else {
-
-        prototype = prototypes;
-
-        // if prototype already defined - finish
-        if ( prototype.isPrototypeOf( obj ) ) return obj;
-
-        // creating new prototypes chain to prevent cyclic error
-        prototype = GetPrototypesDifference( prototype, obj );
-
-        // first connect last prototype in chain with first 'obj's prototype
-        Object.setPrototypeOf( prototype, Object.getPrototypeOf( obj ) );
-
-        // and then set prototype as first prototype in 'obj'
-        Object.setPrototypeOf( obj, prototype );
+        return obj;
     }
+
+    var prototype = prototypes;
+    
+    // if prototype already added - finish
+    if ( isPrototypeOf( prototype, obj ) ) return obj;
+
+    // add system prototype once
+    if ( prototype !== AddPrototypePrototype ) {
+        if ( !obj.__addPrototype ) AddPrototypes( obj, AddPrototypePrototype );
+        
+        // add origin prototype to obj cache ( to use obj.__hasPrototype() )
+        obj.__addPrototype( prototype );
+    }
+
+
+    // create clone from prototype to leave origin without changes
+    var clonedPrototype = ExtendWithoutPrototypes( true, {}, prototype );
+    // add prototypes chain to clone
+    Object.setPrototypeOf( clonedPrototype, Object.getPrototypeOf( prototype ) );
+
+    // creating new prototypes chain to prevent cyclic error
+    clonedPrototype = GetPrototypesDifference( clonedPrototype, obj );
+
+    // get last prototype ( not Object.prototype )
+    var lastPrototype = GetLastPrototype( clonedPrototype, notObjectPrototype );
+
+    // first connect last prototype in chain with first 'obj's prototype
+    Object.setPrototypeOf( lastPrototype, Object.getPrototypeOf( obj ) );
+
+    // and then set prototype as first prototype in 'obj'
+    Object.setPrototypeOf( obj, clonedPrototype );
 
     return obj;
 }
+
+const AddPrototypePrototype = Descriptor.toObject({
+        /**
+         * Special check if prototype was added to object
+         * is needed because on adding prototype will be cloned to new object
+         * @param (Object) proto
+         * @return (Boolean)
+         */
+        __hasPrototype: {
+            value: function ( proto ) { return !!~this.__addedPrototypes.indexOf( proto ) }
+        },
+
+        /**
+         * Adds origin prototype to cache
+         * @param (Object) proto
+         * @return (Boolean)
+         */
+        __addPrototype: {
+            value: function ( proto ) {
+                if ( !this.__hasPrototype( proto ) ) this.__addedPrototypes.push( proto );
+            }
+        },
+
+        // cache for all origin prototypes
+        // its ok to add array to prototype ( it will be cloned )
+        __addedPrototypes: { value: [], writable: true }
+    });
 
 
 /* ------------------------------ Get Last Prototype ------------------------------ */
@@ -161,21 +204,34 @@ function GetLastPrototype( obj, filter ) {
  * @param (Object) obj - object to check
  * @param (Object|Array) prototypes - prototypes to compare with
  * @param (Boolean) setLastToNull - tells that last prototype should be null ( not Object )
- * @return (Object|null) - object with prototypes different from prototypes
+ * @return (Object|null) - object with prototype chain without prototypes
  */
 function GetPrototypesDifference( obj, prototypes, setLastToNull ) {
 
-    if ( isPrototypeOf( obj, prototypes ) ) return null;
+    if ( isPrototypeOf( obj, prototypes ) || isEquivalent( obj, prototypes ) ) return null;
+
+    var proto = obj,
+        uncommonPrototypes = [],
+        hasCommonPrototypes = false;
+
+    // check for common prototypes
+    while ( proto = Object.getPrototypeOf( proto ) ) {
+        if ( !isPrototypeOf( proto, prototypes ) && !isEquivalent( proto, prototypes ) ) {
+            uncommonPrototypes.push( proto );
+        } else {
+            hasCommonPrototypes = true;
+        }
+    }
+
+    if ( !hasCommonPrototypes ) return obj;
 
     var newObj = ExtendWithoutPrototypes( {}, obj ),
         newObjProto = newObj,
-        proto = obj,
         temp;
 
-    // find first common prototype in 'prototype's prototype-chain
-    while ( ( proto = Object.getPrototypeOf( proto ) ) && !isPrototypeOf( proto, prototypes ) ) {
+    for ( var i = 0; i < uncommonPrototypes.length; ++i ) {
         // create clone of uncommon prototype
-        temp = ExtendWithoutPrototypes( {}, proto );
+        temp = ExtendWithoutPrototypes( {}, uncommonPrototypes[ i ] );
 
         // set each prototype clone to next prototype
         Object.setPrototypeOf( newObjProto, temp );
@@ -252,10 +308,36 @@ function ExtendWithoutPrototypes( asProxy, target /*, obj1, ... */ ) {
  * @return (Boolean)
  */
 function isPrototypeOf( proto, objects ) {
+    if ( !objects ) return false;
+
+    if ( Array.isArray( objects ) ) {
+        var result;
+
+        for ( var i = objects.length; i--; ) if ( result = isPrototypeOf( proto, objects ) ) {
+            return result;
+        }
+        return false;
+    }
+
+    if ( proto.isPrototypeOf( objects )
+        || objects.__hasPrototype && objects.__hasPrototype( proto )
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+/* --------------------------------- Helpers --------------------------------- */
+
+function notObjectPrototype( proto ) { return proto !== Object.prototype }
+
+// tells if obj is equivalent to at least one of objects
+function isEquivalent( obj, objects ) {
     if ( !Array.isArray( objects ) ) objects = [ objects ];
 
     for ( var i = objects.length; i--; )
-        if ( proto.isPrototypeOf( objects[ i ] ) ) return true;
+        if ( obj === objects[ i ] ) return true;
 
     return false;
 }
