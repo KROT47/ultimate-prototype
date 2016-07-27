@@ -13,6 +13,8 @@ module.exports.setup = SetupPrototypes;
 
 module.exports.add = AddPrototypes;
 
+module.exports.splice = PrototypeSplice;
+
 module.exports.last = GetLastPrototype;
 
 module.exports.diff = GetPrototypesDifference;
@@ -122,16 +124,15 @@ function AddPrototypes( obj, prototypes ) {
     if ( isPrototypeOf( prototype, obj ) ) return obj;
 
     // add system prototype once
-    if ( prototype !== AddPrototypePrototype ) {
-        if ( !obj.__addPrototype ) AddPrototypes( obj, AddPrototypePrototype );
-        
-        // add origin prototype to obj cache ( to use obj.__hasPrototype() )
-        obj.__addPrototype( prototype );
+    if ( !obj.__addPrototype ) {
+        PrototypeSplice( obj, 0, 0, ExtendWithoutPrototypes( true, {}, AddPrototypePrototype ) );
     }
 
+    // add origin prototype to obj cache ( to use obj.__hasPrototype() )
+    obj.__addPrototype( prototype );
 
     // create clone from prototype to leave origin without changes
-    var clonedPrototype = ExtendWithoutPrototypes( true, {}, prototype );
+    var clonedPrototype = ExtendWithoutPrototypes( {}, prototype );
     // add prototypes chain to clone
     Object.setPrototypeOf( clonedPrototype, Object.getPrototypeOf( prototype ) );
 
@@ -139,7 +140,7 @@ function AddPrototypes( obj, prototypes ) {
     clonedPrototype = GetPrototypesDifference( clonedPrototype, obj );
 
     // get last prototype ( not Object.prototype )
-    var lastPrototype = GetLastPrototype( clonedPrototype, notObjectPrototype );
+    var lastPrototype = GetLastPrototype( clonedPrototype );
 
     // first connect last prototype in chain with first 'obj's prototype
     Object.setPrototypeOf( lastPrototype, Object.getPrototypeOf( obj ) );
@@ -178,18 +179,48 @@ const AddPrototypePrototype = Descriptor.toObject({
     });
 
 
+/* ------------------------------ PrototypeSplice ------------------------------ */
+
+/**
+ * Inserts or replaces prototype in prototype chain using position index and removeCount
+ * @param (Object) obj - object to insert/replace prototype in
+ * @param (Number) index - position where to insert prototype ( 0 - first prototype )
+ * @param (Number) removeCount - how many prototypes to remove from chain since index pos
+ * @param (Object) prototype
+ */
+function PrototypeSplice( obj, index, removeCount, prototype ) {
+    var i = 0,
+        proto = obj,
+        temp;
+
+    while ( ( proto = Object.getPrototypeOf( proto ) ) && ++i <= index );
+
+    temp = proto;
+    i = 0;
+    while ( i++ < removeCount && ( temp = Object.getPrototypeOf( temp ) ) );
+
+    proto = temp || proto;
+
+    var lastPrototype = GetLastPrototype( prototype );
+
+    Object.setPrototypeOf( lastPrototype, proto );
+
+    Object.setPrototypeOf( obj, prototype );
+}
+
+
 /* ------------------------------ Get Last Prototype ------------------------------ */
 
 /**
  * Returns last non null prototype in obj ( using filter if defined )
  * @param (Object) obj
- * @param (Function|undefined) filter
+ * @param (Function|undefined) filter - by default stops before Object.prototype
  * @return (Object)
  */
 function GetLastPrototype( obj, filter ) {
     var proto;
 
-    filter = filter || function () { return true };
+    filter = filter || notObjectPrototype;
 
     while ( ( proto = Object.getPrototypeOf( obj ) ) && filter( proto ) ) { obj = proto }
 
@@ -250,18 +281,17 @@ function GetPrototypesDifference( obj, prototypes, setLastToNull ) {
 
 /**
  * Extends target with all object's properties and prototypes
- * @param (Boolean|undefined) asProxy - ( default: false )
- * @param (Object) obj
+ * @param (Boolean|undefined) deep - ( default: false )
+ * @param (Object) target
+ * @param (Object) obj1, ...
  * @return (Object)
  */
-function ExtendWithPrototypes( asProxy, target /*, obj1, ... */ ) {
+function ExtendWithPrototypes( deep, target /*, obj1, ... */ ) {
     // clone object
     target = ExtendWithoutPrototypes.apply( null, arguments );
 
-    asProxy = typeof asProxy == 'object' ? undefined : asProxy;
-
     // add prototypes
-    for ( var i = asProxy === undefined ? 1 : 2; i < arguments.length; ++i ) {
+    for ( var i = typeof deep === 'object' ? 1 : 2; i < arguments.length; ++i ) {
         AddPrototypes( target, Object.getPrototypeOf( arguments[ i ] ) );
     }
 
@@ -273,17 +303,22 @@ function ExtendWithPrototypes( asProxy, target /*, obj1, ... */ ) {
 
 /**
  * Extends target only with object's own properties
- * @param (Boolean|undefined) asProxy - ( default: false )
- * @param (Object) obj
+ * @param (Boolean|undefined) deep - ( default: false )
+ * @param (Object) target
+ * @param (Object) obj1, ...
  * @return (Object)
  */
-function ExtendWithoutPrototypes( asProxy, target /*, obj1, ... */ ) {
+function ExtendWithoutPrototypes( deep, target /*, obj1, ... */ ) {
 
-    var obj, props, i, k, prop, descriptor;
+    var obj, props, i = 2, k, prop;
 
-    asProxy = typeof asProxy == 'object' ? undefined : asProxy;
+    if ( typeof deep === 'object' ) {
+        target = deep;
+        deep = false;
+        i = 1;
+    }
 
-    for ( i = asProxy === undefined ? 1 : 2; i < arguments.length; ++i ) {
+    for ( ; i < arguments.length; ++i ) {
         obj = arguments[ i ];
 
         props = Object.getOwnPropertyNames( obj );
@@ -291,7 +326,13 @@ function ExtendWithoutPrototypes( asProxy, target /*, obj1, ... */ ) {
         for ( k = props.length; k--; ) {
             prop = props[ k ];
 
-            Descriptor.get( obj, prop ).asProxy( asProxy ).assignTo( target, prop );
+            if ( deep && obj[ prop ] && typeof obj[ prop ] == 'object' ) {
+                target[ prop ] = Array.isArray( obj[ prop ] ) ? [] : {};
+                
+                ExtendWithoutPrototypes( deep, target[ prop ], obj[ prop ] );
+            } else {
+                Descriptor.get( obj, prop ).asProxy( true ).assignTo( target, prop );
+            }
         }
     }
 
