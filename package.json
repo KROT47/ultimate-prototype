@@ -1,6 +1,6 @@
 {
   "name": "ultimate-prototype",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Provides powerful tools to work with prototypes",
   "main": "index.js",
   "scripts": {
